@@ -73,14 +73,22 @@ export const AMMO_PICKUP = {
 export const WEAPON_PICKUP_RESERVE_FRACTION = 0.5;
 
 // --- Kisten -------------------------------------------------------------
-export const CRATE_MIN = 10;
-export const CRATE_MAX = 14;
-export const CRATE_MIN_DISTANCE = 400;
+// Angehoben gegenüber dem Pflichtenheft (10–14 / 2–3 / 55-25-15-5): auf Wunsch
+// sollen Waffen deutlich häufiger auftauchen.
+export const CRATE_MIN = 14;
+export const CRATE_MAX = 18;
+export const CRATE_MIN_DISTANCE = 340;
 export const CRATE_OPEN_TIME = 0.6;
-export const CRATE_PER_WAVE_MIN = 2;
-export const CRATE_PER_WAVE_MAX = 3;
-export const CRATE_LOOT_WEIGHTS = { ammo: 55, weapon: 25, powerup: 15, medipack: 5 } as const;
+export const CRATE_PER_WAVE_MIN = 3;
+export const CRATE_PER_WAVE_MAX = 4;
+export const CRATE_LOOT_WEIGHTS = { ammo: 45, weapon: 38, powerup: 12, medipack: 5 } as const;
 export const MEDIPACK_HEAL = 40;
+
+// --- Waffen, die frei auf der Karte liegen ------------------------------
+export const WEAPON_DROP_START_COUNT = 3;
+export const WEAPON_DROP_PER_WAVE = 2;
+export const WEAPON_DROP_MAX_ON_MAP = 6;
+export const WEAPON_DROP_LIFETIME = 120;
 
 // --- Powerups auf der Karte --------------------------------------------
 export const POWERUP_START_COUNT = 3;

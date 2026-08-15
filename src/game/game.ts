@@ -6,6 +6,7 @@ import {
   PLAYER_MAX_HP, POWERUP_BLINK_AT, POWERUP_LIFETIME, POWERUP_MAX_ON_MAP, POWERUP_PER_WAVE,
   POWERUP_START_COUNT, RESPAWN_HP_FRACTION, REVIVE_DURATION, REVIVE_HP_FRACTION, REVIVE_RANGE,
   SCREEN_SHAKE_DECAY, SPATIAL_CELL, TILE_SIZE,
+  WEAPON_DROP_LIFETIME, WEAPON_DROP_MAX_ON_MAP, WEAPON_DROP_PER_WAVE, WEAPON_DROP_START_COUNT,
 } from '../config/balance.ts';
 import { BOSS_HP_GROWTH, ENEMIES, STUBBORN_TARGET_CHANCE, type ZombieKind } from '../config/enemies.ts';
 import type { Bindings } from '../config/controls.ts';
@@ -81,6 +82,7 @@ export class Game {
 
     this.spawnCrates(this.rng.int(CRATE_MIN, CRATE_MAX));
     this.spawnPowerups(POWERUP_START_COUNT);
+    this.spawnWeaponDrops(WEAPON_DROP_START_COUNT);
     this.rebuildFlowFields();
   }
 
@@ -204,8 +206,9 @@ export class Game {
 
     updatePlayerMovement(this, player, moveX, moveY, strafe, dt);
 
-    const interactHeld = input.isDown(keys.interact);
-    this.updateInteraction(player, other, interactHeld, dt);
+    this.updateInteraction(
+      player, other, input.isDown(keys.interact), input.wasPressed(keys.interact), dt,
+    );
 
     if (player.downed) {
       player.cancelReload();
@@ -233,7 +236,9 @@ export class Game {
     updateWeapon(this, player, dt, wantFire);
   }
 
-  private updateInteraction(player: Player, other: Player, held: boolean, dt: number): void {
+  private updateInteraction(
+    player: Player, other: Player, held: boolean, pressed: boolean, dt: number,
+  ): void {
     if (player.downed) {
       player.interactKind = 'none';
       player.interactProgress = 0;
@@ -295,6 +300,27 @@ export class Game {
     this.releaseCrate(player);
     player.interactKind = 'none';
     player.interactProgress = 0;
+
+    // Waffenplätze voll: Tausch ohne Haltezeit, aber flankengesteuert — sonst
+    // tauscht eine gehaltene Taste jede Tick zwischen beiden Waffen hin und her.
+    if (pressed) this.trySwapGroundWeapon(player);
+  }
+
+  private trySwapGroundWeapon(player: Player): void {
+    const items = this.pickups.items;
+    let nearest: Pickup | null = null;
+    let nearestDist = INTERACT_RANGE;
+    for (let i = 0; i < items.length; i++) {
+      const p = items[i];
+      if (!p.active || p.kind !== 'waffe') continue;
+      const d = Math.hypot(p.x - player.x, p.y - player.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearest = p;
+      }
+    }
+    if (!nearest) return;
+    this.collect(nearest, player);
   }
 
   private releaseCrate(player: Player): void {
@@ -512,6 +538,7 @@ export class Game {
     w.beginPrep();
     this.spawnCrates(this.rng.int(CRATE_PER_WAVE_MIN, CRATE_PER_WAVE_MAX));
     this.spawnPowerups(POWERUP_PER_WAVE);
+    this.spawnWeaponDrops(WEAPON_DROP_PER_WAVE);
   }
 
   private trySpawnZombie(kind: ZombieKind): boolean {
@@ -611,15 +638,37 @@ export class Game {
   }
 
   dropWeapon(id: WeaponId, x: number, y: number): void {
+    this.placeWeaponPickup(
+      id, x + this.rng.range(-18, 18), y + this.rng.range(-18, 18), DROPPED_WEAPON_LIFETIME,
+    );
+  }
+
+  private placeWeaponPickup(id: WeaponId, x: number, y: number, lifetime: number): void {
     const p = this.pickups.obtain();
     if (!p) return;
     p.kind = 'waffe';
-    p.x = x + this.rng.range(-18, 18);
-    p.y = y + this.rng.range(-18, 18);
+    p.x = x;
+    p.y = y;
     p.weaponId = id;
-    p.life = DROPPED_WEAPON_LIFETIME;
-    p.maxLife = DROPPED_WEAPON_LIFETIME;
+    p.life = lifetime;
+    p.maxLife = lifetime;
     p.bob = this.rng.range(0, Math.PI * 2);
+  }
+
+  /** Frei herumliegende Waffen, unabhängig von den Kisten. */
+  private spawnWeaponDrops(count: number): void {
+    let onMap = 0;
+    const items = this.pickups.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].active && items[i].kind === 'waffe') onMap++;
+    }
+    for (let i = 0; i < count && onMap < WEAPON_DROP_MAX_ON_MAP; i++) {
+      if (!this.findFreeSpot(140, 240)) continue;
+      this.placeWeaponPickup(
+        this.rng.pick(LOOTABLE_WEAPONS), spawnPoint.x, spawnPoint.y, WEAPON_DROP_LIFETIME,
+      );
+      onMap++;
+    }
   }
 
   private findFreeSpot(minCrateDistance: number, minPlayerDistance: number): boolean {
@@ -739,6 +788,9 @@ export class Game {
         const dx = player.x - p.x;
         const dy = player.y - p.y;
         if (dx * dx + dy * dy > 26 * 26) continue;
+        // Bei vollen Waffenplätzen kein Aufsammeln im Vorbeilaufen — sonst wirft
+        // man mitten im Gefecht ungewollt die gute Waffe weg.
+        if (p.kind === 'waffe' && !player.hasFreeSlot && !player.hasWeapon(p.weaponId)) continue;
         this.collect(p, player);
         break;
       }

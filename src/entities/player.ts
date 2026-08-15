@@ -162,6 +162,12 @@ export class Player {
     return false;
   }
 
+  /** Freier Platz neben der Pistole? Steuert, ob Drüberlaufen zum Aufsammeln reicht. */
+  get hasFreeSlot(): boolean {
+    for (let i = 1; i < WEAPON_SLOTS; i++) if (this.slots[i] === null) return true;
+    return false;
+  }
+
   /** Gibt die fallengelassene Waffe zurück, falls kein Platz mehr frei war. */
   giveWeapon(id: WeaponId): WeaponId | null {
     const def = WEAPONS[id];
