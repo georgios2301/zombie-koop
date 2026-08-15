@@ -84,6 +84,19 @@ body {
   margin: 10px 0;
 }
 
+.row.skins {
+  justify-content: center;
+  gap: 18px;
+}
+
+.row.skins canvas {
+  width: 96px;
+  height: 96px;
+  background: #12171b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
 button {
   font: inherit;
   font-weight: 600;

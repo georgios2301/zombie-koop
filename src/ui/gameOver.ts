@@ -1,6 +1,6 @@
 import { seedToText } from '../core/rng.ts';
 import type { Game } from '../game/game.ts';
-import { BIOMES } from '../world/biomes.ts';
+import { MAP_NAME } from '../world/terrain.ts';
 import { createElement, query } from './menu.ts';
 
 export interface GameOverCallbacks {
@@ -25,7 +25,8 @@ export class GameOverScreen {
           <div class="stat"><span>Punkte</span><strong>${game.score.total}</strong></div>
           <div class="stat"><span>Beste Kombo</span><strong>${game.score.bestCombo}</strong></div>
           <div class="stat"><span>Seed</span><strong>${seedToText(game.seed)}</strong></div>
-          <div class="stat"><span>Biom</span><strong>${BIOMES[game.biome].name}</strong></div>
+          <div class="stat"><span>Karte</span><strong>${MAP_NAME}</strong></div>
+          <div class="stat"><span>Tageszeit</span><strong>${game.timeOfDay}</strong></div>
         </div>
 
         <h2>Spielerbilanz</h2>

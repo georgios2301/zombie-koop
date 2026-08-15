@@ -3,9 +3,11 @@ import {
   type Bindings, keyLabel, saveBindings,
 } from '../config/controls.ts';
 import type { Input } from '../core/input.ts';
+import { DEFAULT_SKINS, SKINS } from '../config/skins.ts';
 import { parseSeed, randomSeed, seedToText } from '../core/rng.ts';
 import { loadHighscore } from '../game/score.ts';
-import { BIOMES, BIOME_IDS, type BiomeId } from '../world/biomes.ts';
+import { paintSkinPreview } from '../render/sprites.ts';
+import { MAP_NAME, TIME_OF_DAY_IDS, type TimeOfDay } from '../world/terrain.ts';
 
 /** <template> statt <div>, sonst verwirft der Parser Tabellenzeilen. */
 export function createElement(html: string): HTMLElement {
@@ -24,7 +26,8 @@ export function query<T extends HTMLElement>(root: HTMLElement, selector: string
 
 export interface StartOptions {
   seed: number;
-  biome: BiomeId;
+  timeOfDay: TimeOfDay;
+  skins: [number, number];
 }
 
 /**
@@ -112,24 +115,38 @@ export class MenuScreen {
 
   private build(): HTMLElement {
     const highscore = loadHighscore();
-    const biomeOptions = BIOME_IDS
-      .map((id) => `<option value="${id}">${BIOMES[id].name}</option>`)
+    const skinOptions = SKINS
+      .map((skin) => `<option value="${skin.id}">${skin.name}</option>`)
+      .join('');
+    const timeOptions = TIME_OF_DAY_IDS
+      .map((id) => `<option value="${id}">${id}</option>`)
       .join('');
 
     const root = createElement(`
       <div class="screen">
         <h1>Zombie Koop</h1>
         <p>Zwei Spieler, eine Tastatur, endlose Zombiewellen. Haltet euch gegenseitig am Leben.</p>
+        <p class="hint">Karte: ${MAP_NAME} — Küste, Wüstenrand, Altstadt und Wald, getrennt durch den
+        Fluss. Drei Brücken, eine Felsschlucht und das Stadttor sind die einzigen Übergänge.</p>
 
         <div class="row">
           <label>Seed <input type="text" id="seed" placeholder="zufällig" autocomplete="off" /></label>
-          <label>Biom
-            <select id="biome">
-              <option value="zufall">Zufällig</option>
-              ${biomeOptions}
-            </select>
+          <label>Tageszeit
+            <select id="tageszeit">${timeOptions}</select>
           </label>
         </div>
+
+        <div class="row skins">
+          <label class="p1">Spieler 1
+            <select id="skin0">${skinOptions}</select>
+          </label>
+          <canvas id="preview0" width="96" height="96"></canvas>
+          <canvas id="preview1" width="96" height="96"></canvas>
+          <label class="p2">Spieler 2
+            <select id="skin1">${skinOptions}</select>
+          </label>
+        </div>
+        <p class="hint" id="skinnote"></p>
 
         <div class="row">
           <button class="primary" id="start">Spiel starten</button>
@@ -146,18 +163,48 @@ export class MenuScreen {
     const sub = query(root, '#sub');
     const highscoreLabel = query(root, '#highscore');
     highscoreLabel.textContent = highscore
-      ? `Bestwert: ${highscore.score} Punkte · Welle ${highscore.wave} · Seed ${seedToText(highscore.seed)} · ${highscore.biome}`
+      ? `Bestwert: ${highscore.score} Punkte · Welle ${highscore.wave} · Seed ${seedToText(highscore.seed)} · ${highscore.timeOfDay}`
       : 'Noch kein Bestwert gespeichert.';
+
+    const skinFields = [
+      query<HTMLSelectElement>(root, '#skin0'),
+      query<HTMLSelectElement>(root, '#skin1'),
+    ];
+    const previews = [
+      query<HTMLCanvasElement>(root, '#preview0'),
+      query<HTMLCanvasElement>(root, '#preview1'),
+    ];
+    const note = query(root, '#skinnote');
+
+    const refreshSkins = (): void => {
+      const names: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const id = Number(skinFields[i].value) || 0;
+        const target = previews[i].getContext('2d');
+        if (target) {
+          target.clearRect(0, 0, previews[i].width, previews[i].height);
+          target.drawImage(paintSkinPreview(id, i, previews[i].width), 0, 0);
+        }
+        names.push(SKINS[id % SKINS.length].note);
+      }
+      note.textContent = `Spieler 1: ${names[0]} · Spieler 2: ${names[1]}`;
+    };
+
+    for (let i = 0; i < 2; i++) {
+      skinFields[i].value = String(DEFAULT_SKINS[i]);
+      skinFields[i].addEventListener('change', refreshSkins);
+    }
+    refreshSkins();
 
     query(root, '#start').addEventListener('click', () => {
       const seedField = query<HTMLInputElement>(root, '#seed');
-      const biomeField = query<HTMLSelectElement>(root, '#biome');
+      const timeField = query<HTMLSelectElement>(root, '#tageszeit');
       const seed = seedField.value.trim().length > 0 ? parseSeed(seedField.value) : randomSeed();
-      const chosen = biomeField.value;
-      const biome: BiomeId = chosen === 'zufall'
-        ? BIOME_IDS[Math.floor((seed / 4294967296) * BIOME_IDS.length) % BIOME_IDS.length]
-        : (chosen as BiomeId);
-      this.onStart({ seed, biome });
+      this.onStart({
+        seed,
+        timeOfDay: timeField.value as TimeOfDay,
+        skins: [Number(skinFields[0].value) || 0, Number(skinFields[1].value) || 0],
+      });
     });
 
     query(root, '#controls').addEventListener('click', () => {

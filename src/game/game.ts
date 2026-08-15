@@ -1,7 +1,8 @@
 import {
-  AMMO_PICKUP, CRATE_LOOT_WEIGHTS, CRATE_MAX, CRATE_MIN, CRATE_MIN_DISTANCE,
+  AMMO_PICKUP, CRATE_LOOT_WEIGHTS, CRATE_MIN_DISTANCE,
   CRATE_OPEN_TIME, CRATE_PER_WAVE_MAX, CRATE_PER_WAVE_MIN, DOWNED_HIT_TIME_PENALTY,
-  DROPPED_WEAPON_LIFETIME, INTERACT_RANGE, MAP_SIZE, MAX_ACID, MAX_BULLETS, MAX_CRATES,
+  DROPPED_WEAPON_LIFETIME, INTERACT_RANGE, MAP_EXTENT, MAP_HEIGHT, MAP_WIDTH,
+  MAX_ACID, MAX_BULLETS, MAX_CRATES,
   MAX_PICKUPS, MAX_ZOMBIES, MEDIPACK_HEAL, PATH_REBUILD_INTERVAL, PLAYER_HIT_INVULN,
   PLAYER_MAX_HP, POWERUP_BLINK_AT, POWERUP_LIFETIME, POWERUP_MAX_ON_MAP, POWERUP_PER_WAVE,
   POWERUP_START_COUNT, RESPAWN_HP_FRACTION, REVIVE_DURATION, REVIVE_HP_FRACTION, REVIVE_RANGE,
@@ -27,8 +28,9 @@ import { FlowField } from '../systems/pathfinding.ts';
 import { Effects } from '../systems/particles.ts';
 import { AUTO_AIM_RANGE, POWERUPS, POWERUP_IDS, type PowerupId, powerupIndex } from '../systems/powerups.ts';
 import { damageTile, tileBlocks } from '../world/collision.ts';
-import type { BiomeId } from '../world/biomes.ts';
+import type { TimeOfDay } from '../world/terrain.ts';
 import { generateMap, type GameMap } from '../world/mapGenerator.ts';
+import { BOSSES } from '../config/skins.ts';
 import { Camera } from './camera.ts';
 import { Score } from './score.ts';
 import { WaveManager } from './waveManager.ts';
@@ -37,9 +39,16 @@ export type GameState = 'laeuft' | 'ende';
 
 const POWERUP_AUTO = 0;
 
+export interface GameOptions {
+  readonly seed: number;
+  readonly timeOfDay: TimeOfDay;
+  /** Gewählte Spielfigur je Spieler. */
+  readonly skins: readonly [number, number];
+}
+
 export class Game {
   readonly seed: number;
-  readonly biome: BiomeId;
+  readonly timeOfDay: TimeOfDay;
   readonly map: GameMap;
   readonly rng: Rng;
   readonly players: readonly [Player, Player];
@@ -50,12 +59,11 @@ export class Game {
   readonly pickups = new Pool<Pickup>(MAX_PICKUPS, () => new Pickup());
   readonly crates = new Pool<Crate>(MAX_CRATES, () => new Crate());
   readonly effects = new Effects();
-  readonly hash = new SpatialHash(MAP_SIZE, SPATIAL_CELL, MAX_ZOMBIES);
+  readonly hash = new SpatialHash(MAP_EXTENT, SPATIAL_CELL, MAX_ZOMBIES);
   readonly camera = new Camera();
   readonly score = new Score();
   readonly wave = new WaveManager();
   readonly tetherFlags: [boolean, boolean] = [false, false];
-  readonly dirtyChunks = new Set<number>();
 
   state: GameState = 'laeuft';
   bossHpBarValue = 0;
@@ -67,20 +75,22 @@ export class Game {
   private bulletStamp = 0;
   private bindings: readonly [Bindings, Bindings];
 
-  constructor(seed: number, biome: BiomeId, bindings: readonly [Bindings, Bindings]) {
-    this.seed = seed;
-    this.biome = biome;
+  constructor(options: GameOptions, bindings: readonly [Bindings, Bindings]) {
+    this.seed = options.seed;
+    this.timeOfDay = options.timeOfDay;
     this.bindings = bindings;
-    this.map = generateMap(seed, biome);
-    this.rng = new Rng((seed ^ 0x9e3779b9) >>> 0);
+    this.map = generateMap(options.seed);
+    this.rng = new Rng((options.seed ^ 0x9e3779b9) >>> 0);
     this.players = [new Player(0), new Player(1)];
     this.flows = [new FlowField(false), new FlowField(true), new FlowField(false), new FlowField(true)];
 
     this.players[0].reset(this.map.spawnX - 26, this.map.spawnY);
     this.players[1].reset(this.map.spawnX + 26, this.map.spawnY);
+    this.players[0].skinId = options.skins[0];
+    this.players[1].skinId = options.skins[1];
     this.camera.snapTo(this.map.spawnX, this.map.spawnY);
 
-    this.spawnCrates(this.rng.int(CRATE_MIN, CRATE_MAX));
+    this.placeDesignedCrates();
     this.spawnPowerups(POWERUP_START_COUNT);
     this.spawnWeaponDrops(WEAPON_DROP_START_COUNT);
     this.rebuildFlowFields();
@@ -552,6 +562,8 @@ export class Game {
     const hp = ENEMIES.boss.hp * Math.pow(BOSS_HP_GROWTH, this.wave.bossAppearances);
     const boss = this.createZombie('boss', spawnPoint.x, spawnPoint.y, hp);
     if (!boss) return false;
+    // Die drei Bossmodelle wechseln sich reihum ab.
+    boss.bossVariant = this.wave.bossAppearances % BOSSES.length;
     this.wave.bossAppearances++;
     boss.summonTimer = 6;
     boss.chargeTimer = 4;
@@ -569,8 +581,8 @@ export class Game {
       const dist = minRadius + this.rng.range(0, 320);
       const x = cam.x + Math.cos(angle) * dist;
       const y = cam.y + Math.sin(angle) * dist;
-      if (x < radius + TILE_SIZE * 3 || y < radius + TILE_SIZE * 3) continue;
-      if (x > MAP_SIZE - radius - TILE_SIZE * 3 || y > MAP_SIZE - radius - TILE_SIZE * 3) continue;
+      if (x < radius + TILE_SIZE * 2 || y < radius + TILE_SIZE * 2) continue;
+      if (x > MAP_WIDTH - radius - TILE_SIZE * 2 || y > MAP_HEIGHT - radius - TILE_SIZE * 2) continue;
       if (cam.isVisible(x, y, SPAWN_MARGIN)) continue;
       if (!this.isFreeWorldPoint(x, y, radius)) continue;
       if (!this.flowFor(0, false).reachable(x, y) && !this.flowFor(1, false).reachable(x, y)) continue;
@@ -582,7 +594,7 @@ export class Game {
   }
 
   private isFreeWorldPoint(x: number, y: number, radius = 12): boolean {
-    if (x < 0 || y < 0 || x >= MAP_SIZE || y >= MAP_SIZE) return false;
+    if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return false;
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(y / TILE_SIZE);
     if (this.map.region[ty * this.map.width + tx] !== 1) return false;
@@ -597,6 +609,22 @@ export class Game {
   }
 
   // --- Kisten, Beute, Powerups -----------------------------------------
+
+  /** Startkisten stehen an den im Kartenentwurf markierten Fundorten. */
+  private placeDesignedCrates(): void {
+    for (const spot of this.map.crateSpots) {
+      const tx = Math.floor(spot.x / TILE_SIZE);
+      const ty = Math.floor(spot.y / TILE_SIZE);
+      if (this.map.region[ty * this.map.width + tx] !== 1) continue;
+      const crate = this.crates.obtain();
+      if (!crate) return;
+      crate.x = spot.x;
+      crate.y = spot.y;
+      crate.progress = 0;
+      crate.openedBy = -1;
+      crate.glow = this.rng.range(0, Math.PI * 2);
+    }
+  }
 
   private spawnCrates(count: number): void {
     for (let i = 0; i < count; i++) {
@@ -844,9 +872,9 @@ export class Game {
     }
   }
 
-  onTileDestroyed(tx: number, ty: number): void {
-    this.dirtyChunks.add(chunkKey(tx, ty));
-  }
+  /** Der Boden ist gebacken und ändert sich nicht — Hindernisse liegen als
+   *  eigene Sprites darüber und verschwinden mit ihrer Kachel von selbst. */
+  onTileDestroyed(): void {}
 
   // --- Hilfen fürs HUD --------------------------------------------------
 
@@ -861,7 +889,3 @@ const spawnPoint = { x: 0, y: 0 };
 const ALL_AMMO_KINDS = ['leicht', 'schwer', 'schrot', 'treibstoff'] as const;
 
 export const CHUNK_TILES = 20;
-
-export function chunkKey(tx: number, ty: number): number {
-  return Math.floor(ty / CHUNK_TILES) * 1000 + Math.floor(tx / CHUNK_TILES);
-}

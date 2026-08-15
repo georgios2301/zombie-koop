@@ -1,20 +1,28 @@
 import {
-  CRATE_OPEN_TIME, DOWNED_DURATION, MAP_TILES, REVIVE_DURATION, TILE_SIZE,
+  CRATE_OPEN_TIME, DOWNED_DURATION, MAP_COLS, MAP_ROWS, REVIVE_DURATION, TILE_SIZE,
 } from '../config/balance.ts';
 import { CHUNK_TILES, type Game } from '../game/game.ts';
 import { PLAYER_COLORS, PLAYER_COLORS_DARK } from '../entities/player.ts';
-import { BIOMES } from '../world/biomes.ts';
 import { POWERUPS, powerupIndex } from '../systems/powerups.ts';
-import { buildSprites, buildTileSprites, makeCanvas, tileVariant, type SpriteSet } from './sprites.ts';
+import { TIME_TINTS } from '../world/terrain.ts';
+import type { MapObject } from '../world/mapGenerator.ts';
+import { buildSprites, type SpriteSet } from './sprites.ts';
+import {
+  buildingSprite, drawBuildingLabel, makeCanvas, objectSprite, paintGroundTile,
+} from './worldArt.ts';
 
-const CHUNKS_PER_ROW = Math.ceil(MAP_TILES / CHUNK_TILES);
+const CHUNK_COLS = Math.ceil(MAP_COLS / CHUNK_TILES);
+const CHUNK_ROWS = Math.ceil(MAP_ROWS / CHUNK_TILES);
 const CHUNK_PIXELS = CHUNK_TILES * TILE_SIZE;
+/** Sichtbarkeitsrand für Objekte, die über ihre Kachel hinausragen. */
+const OBJECT_MARGIN = TILE_SIZE * 3;
+/** Ab dieser Zoomstufe lohnen sich die Gebäudeschilder nicht mehr. */
+const LABEL_MIN_ZOOM = 0.75;
 
 export class Renderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly sprites: SpriteSet;
-  private tileSprites: HTMLCanvasElement[][] = [];
   private chunks: HTMLCanvasElement[] = [];
   private game: Game | null = null;
   dpr = 1;
@@ -42,44 +50,27 @@ export class Renderer {
     this.game = game;
     this.chunks = [];
     if (!game) return;
-    this.tileSprites = buildTileSprites(BIOMES[game.biome].palette);
-    this.chunks = new Array<HTMLCanvasElement>(CHUNKS_PER_ROW * CHUNKS_PER_ROW);
-    for (let cy = 0; cy < CHUNKS_PER_ROW; cy++) {
-      for (let cx = 0; cx < CHUNKS_PER_ROW; cx++) this.bakeChunk(game, cx, cy);
+    this.chunks = new Array<HTMLCanvasElement>(CHUNK_COLS * CHUNK_ROWS);
+    for (let cy = 0; cy < CHUNK_ROWS; cy++) {
+      for (let cx = 0; cx < CHUNK_COLS; cx++) this.bakeChunk(game, cx, cy);
     }
   }
 
+  /** Der Boden ändert sich nie — er wird einmal je Kachelblock gebacken. */
   private bakeChunk(game: Game, cx: number, cy: number): void {
-    const index = cy * CHUNKS_PER_ROW + cx;
-    let canvas = this.chunks[index];
-    if (!canvas) {
-      canvas = makeCanvas(CHUNK_PIXELS, CHUNK_PIXELS);
-      this.chunks[index] = canvas;
-    }
+    const canvas = makeCanvas(CHUNK_PIXELS, CHUNK_PIXELS);
+    this.chunks[cy * CHUNK_COLS + cx] = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.clearRect(0, 0, CHUNK_PIXELS, CHUNK_PIXELS);
     for (let ty = 0; ty < CHUNK_TILES; ty++) {
       const worldTy = cy * CHUNK_TILES + ty;
-      if (worldTy >= MAP_TILES) break;
+      if (worldTy >= MAP_ROWS) break;
       for (let tx = 0; tx < CHUNK_TILES; tx++) {
         const worldTx = cx * CHUNK_TILES + tx;
-        if (worldTx >= MAP_TILES) break;
-        const tile = game.map.tiles[worldTy * MAP_TILES + worldTx];
-        const sprite = this.tileSprites[tile][tileVariant(worldTx, worldTy)];
-        ctx.drawImage(sprite, tx * TILE_SIZE, ty * TILE_SIZE);
+        if (worldTx >= MAP_COLS) break;
+        paintGroundTile(ctx, game.map, worldTx, worldTy, tx * TILE_SIZE, ty * TILE_SIZE);
       }
     }
-  }
-
-  private flushDirtyChunks(game: Game): void {
-    if (game.dirtyChunks.size === 0) return;
-    for (const key of game.dirtyChunks) {
-      const cx = key % 1000;
-      const cy = Math.floor(key / 1000);
-      if (cx < CHUNKS_PER_ROW && cy < CHUNKS_PER_ROW) this.bakeChunk(game, cx, cy);
-    }
-    game.dirtyChunks.clear();
   }
 
   render(): void {
@@ -90,8 +81,6 @@ export class Renderer {
     ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
     if (!game) return;
 
-    this.flushDirtyChunks(game);
-
     const cam = game.camera;
     ctx.save();
     ctx.translate(this.cssWidth / 2 + game.effects.shakeX, this.cssHeight / 2 + game.effects.shakeY);
@@ -99,6 +88,8 @@ export class Renderer {
     ctx.translate(-cam.x, -cam.y);
 
     this.drawTerrain(cam.left, cam.top, cam.right, cam.bottom);
+    this.drawBuildings(game);
+    this.drawMapObjects(game);
     this.drawAcid(game);
     this.drawCrates(game);
     this.drawPickups(game);
@@ -110,19 +101,72 @@ export class Renderer {
     this.drawTetherArrows(game);
 
     ctx.restore();
+    this.drawTimeTint(game);
   }
 
   private drawTerrain(left: number, top: number, right: number, bottom: number): void {
     const ctx = this.ctx;
     const minCx = Math.max(0, Math.floor(left / CHUNK_PIXELS));
-    const maxCx = Math.min(CHUNKS_PER_ROW - 1, Math.floor(right / CHUNK_PIXELS));
+    const maxCx = Math.min(CHUNK_COLS - 1, Math.floor(right / CHUNK_PIXELS));
     const minCy = Math.max(0, Math.floor(top / CHUNK_PIXELS));
-    const maxCy = Math.min(CHUNKS_PER_ROW - 1, Math.floor(bottom / CHUNK_PIXELS));
+    const maxCy = Math.min(CHUNK_ROWS - 1, Math.floor(bottom / CHUNK_PIXELS));
     for (let cy = minCy; cy <= maxCy; cy++) {
       for (let cx = minCx; cx <= maxCx; cx++) {
-        const canvas = this.chunks[cy * CHUNKS_PER_ROW + cx];
+        const canvas = this.chunks[cy * CHUNK_COLS + cx];
         if (canvas) ctx.drawImage(canvas, cx * CHUNK_PIXELS, cy * CHUNK_PIXELS);
       }
+    }
+  }
+
+  private drawBuildings(game: Game): void {
+    const ctx = this.ctx;
+    const cam = game.camera;
+    const labels = cam.zoom >= LABEL_MIN_ZOOM;
+    for (const b of game.map.buildings) {
+      const x = b.x * TILE_SIZE;
+      const y = b.y * TILE_SIZE;
+      const w = b.w * TILE_SIZE;
+      const h = b.h * TILE_SIZE;
+      if (x > cam.right + TILE_SIZE || x + w < cam.left - TILE_SIZE) continue;
+      if (y > cam.bottom + TILE_SIZE || y + h < cam.top - TILE_SIZE) continue;
+      const sprite = buildingSprite(b);
+      ctx.drawImage(sprite.canvas, x - sprite.ax, y - sprite.ay);
+      if (labels) drawBuildingLabel(ctx, b);
+    }
+  }
+
+  /**
+   * Objekte sind nach y sortiert. Der sichtbare Ausschnitt wird binär gesucht,
+   * damit pro Bild nur die tatsächlich sichtbaren Sprites durchlaufen werden.
+   */
+  private drawMapObjects(game: Game): void {
+    const ctx = this.ctx;
+    const cam = game.camera;
+    const objects = game.map.objects;
+    const tiles = game.map.tiles;
+    const topTile = (cam.top - OBJECT_MARGIN) / TILE_SIZE;
+    const bottomTile = (cam.bottom + OBJECT_MARGIN) / TILE_SIZE;
+    const leftTile = (cam.left - OBJECT_MARGIN) / TILE_SIZE;
+    const rightTile = (cam.right + OBJECT_MARGIN) / TILE_SIZE;
+
+    for (let i = firstAtOrAfter(objects, topTile); i < objects.length; i++) {
+      const o = objects[i];
+      if (o.y > bottomTile) break;
+      if (o.x < leftTile || o.x > rightTile) continue;
+      // Zerschossene Hindernisse verschwinden mitsamt ihrem Bild.
+      if (o.tileIndex >= 0 && tiles[o.tileIndex] !== o.obstacle) continue;
+      const sprite = objectSprite(o.kind, o.variant);
+      ctx.drawImage(sprite.canvas, o.x * TILE_SIZE - sprite.ax, o.y * TILE_SIZE - sprite.ay);
+    }
+  }
+
+  private drawTimeTint(game: Game): void {
+    const layers = TIME_TINTS[game.timeOfDay];
+    if (layers.length === 0) return;
+    const ctx = this.ctx;
+    for (const color of layers) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, this.cssWidth, this.cssHeight);
     }
   }
 
@@ -217,9 +261,10 @@ export class Renderer {
     const items = game.zombies.items;
     for (let i = 0; i < items.length; i++) {
       const z = items[i];
-      if (!z.active || !game.camera.isVisible(z.x, z.y, z.radius + 30)) continue;
-      const frames = this.sprites.zombies[z.kind];
-      const sprite = frames[Math.floor(z.anim) % 2];
+      if (!z.active || !game.camera.isVisible(z.x, z.y, z.radius + 40)) continue;
+      const sprite = z.isBoss
+        ? this.sprites.bosses[z.bossVariant % this.sprites.bosses.length]
+        : this.sprites.zombies[z.kind][Math.floor(z.anim) % 2];
       ctx.save();
       ctx.translate(z.x, z.y);
       ctx.rotate(z.facing);
@@ -248,9 +293,8 @@ export class Renderer {
     const ctx = this.ctx;
     for (const player of game.players) {
       if (!player.alive) continue;
-      const sprite = player.downed
-        ? this.sprites.playersDowned[player.index]
-        : this.sprites.players[player.index];
+      const set = player.downed ? this.sprites.playersDowned : this.sprites.players;
+      const sprite = set[player.index][player.skinId % set[player.index].length];
       const angle = Math.atan2(player.aimY, player.aimX);
 
       ctx.save();
@@ -283,13 +327,13 @@ export class Renderer {
 
       // Blickrichtungspfeil
       if (!player.downed) {
-        const ax = player.x + player.aimX * (player.radius + 16);
-        const ay = player.y + player.aimY * (player.radius + 16);
+        const ax = player.x + player.aimX * (player.radius + 18);
+        const ay = player.y + player.aimY * (player.radius + 18);
         ctx.strokeStyle = PLAYER_COLORS[player.index];
         ctx.lineWidth = 2.5;
         ctx.globalAlpha = 0.85;
         ctx.beginPath();
-        ctx.moveTo(player.x + player.aimX * (player.radius + 6), player.y + player.aimY * (player.radius + 6));
+        ctx.moveTo(player.x + player.aimX * (player.radius + 8), player.y + player.aimY * (player.radius + 8));
         ctx.lineTo(ax, ay);
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -430,4 +474,16 @@ export class Renderer {
   get spriteSet(): SpriteSet {
     return this.sprites;
   }
+}
+
+/** Erster Index mit objects[i].y >= value (Liste ist nach y sortiert). */
+function firstAtOrAfter(objects: readonly MapObject[], value: number): number {
+  let low = 0;
+  let high = objects.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (objects[mid].y < value) low = mid + 1;
+    else high = mid;
+  }
+  return low;
 }

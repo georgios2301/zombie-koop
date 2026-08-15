@@ -5,9 +5,14 @@
  */
 
 // --- Welt ---------------------------------------------------------------
-export const TILE_SIZE = 32;
-export const MAP_TILES = 100;
-export const MAP_SIZE = TILE_SIZE * MAP_TILES; // 3200 px
+// Maße der Handkarte „Sperrzone Rothenbuch": 96 × 72 Kacheln à 40 px.
+export const TILE_SIZE = 40;
+export const MAP_COLS = 96;
+export const MAP_ROWS = 72;
+export const MAP_WIDTH = TILE_SIZE * MAP_COLS; // 3840 px
+export const MAP_HEIGHT = TILE_SIZE * MAP_ROWS; // 2880 px
+/** Längste Kante — für quadratische Hilfsstrukturen wie das Raumgitter. */
+export const MAP_EXTENT = Math.max(MAP_WIDTH, MAP_HEIGHT);
 
 export const SIM_HZ = 60;
 export const SIM_DT = 1 / SIM_HZ;
@@ -75,8 +80,8 @@ export const WEAPON_PICKUP_RESERVE_FRACTION = 0.5;
 // --- Kisten -------------------------------------------------------------
 // Angehoben gegenüber dem Pflichtenheft (10–14 / 2–3 / 55-25-15-5): auf Wunsch
 // sollen Waffen deutlich häufiger auftauchen.
-export const CRATE_MIN = 14;
-export const CRATE_MAX = 18;
+// Die Startkisten stehen an den im Kartenentwurf gesetzten Fundorten
+// (16 auf der Karte, 5 in den betretbaren Gebäuden) — daher kein Startbereich.
 export const CRATE_MIN_DISTANCE = 340;
 export const CRATE_OPEN_TIME = 0.6;
 export const CRATE_PER_WAVE_MIN = 3;
@@ -112,11 +117,15 @@ export const ACID_PROJECTILE_SPEED = 330;
 
 // --- Zerstörbare Hindernisse -------------------------------------------
 export const DESTRUCTIBLE_HP = {
-  fence: 60,
-  hedge: 90,
   car: 220,
+  container: 190,
   dumpster: 140,
-  prop: 70,
+  tent: 60,
+  barrel: 70,
+  barrier: 90,
+  log: 70,
+  shelf: 60,
+  lamp: 50,
 } as const;
 
 // --- Technik ------------------------------------------------------------

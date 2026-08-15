@@ -16,6 +16,8 @@ export const PLAYER_COLORS_DARK = ['#1d5c9e', '#a35a17'] as const;
 
 export class Player {
   readonly index: number;
+  /** Gewählte Spielfigur aus config/skins.ts — rein optisch. */
+  skinId = 0;
   x = 0;
   y = 0;
   vx = 0;

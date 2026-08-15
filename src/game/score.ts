@@ -50,7 +50,8 @@ export interface HighscoreEntry {
   score: number;
   wave: number;
   seed: number;
-  biome: string;
+  /** Tageszeit des Laufs — die Karte selbst ist inzwischen immer dieselbe. */
+  timeOfDay: string;
 }
 
 export function loadHighscore(): HighscoreEntry | null {
@@ -63,7 +64,7 @@ export function loadHighscore(): HighscoreEntry | null {
       score: parsed.score,
       wave: typeof parsed.wave === 'number' ? parsed.wave : 0,
       seed: typeof parsed.seed === 'number' ? parsed.seed : 0,
-      biome: typeof parsed.biome === 'string' ? parsed.biome : '?',
+      timeOfDay: typeof parsed.timeOfDay === 'string' ? parsed.timeOfDay : '?',
     };
   } catch {
     return null;

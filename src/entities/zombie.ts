@@ -34,6 +34,8 @@ export class Zombie implements Poolable {
   facing = 0;
   scoreValue = 0;
   isBoss = false;
+  /** Welches der drei Bossmodelle gezeichnet wird. */
+  bossVariant = 0;
   /** Vermeidet Mehrfachtreffer desselben Geschosses bei Durchschlag. */
   hitStamp = -1;
   /** Wie lange der Zombie schon kaum vorankommt (Ecken, Engstellen). */
@@ -74,6 +76,7 @@ export class Zombie implements Poolable {
     this.facing = 0;
     this.scoreValue = def.score;
     this.isBoss = kind === 'boss';
+    this.bossVariant = 0;
     this.hitStamp = -1;
     this.stuckTimer = 0;
     this.sidestepTimer = 0;

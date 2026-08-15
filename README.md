@@ -19,6 +19,17 @@ npm run dev
 npm run build
 ```
 
+## Karte
+
+Gespielt wird auf einer handgesetzten Karte: **Sperrzone Rothenbuch**, 96 × 72 Kacheln
+à 40 px (3840 × 2880 px). Vier Zonen — Küstenstreifen, Wüstenrand, Altstadt und Wald —
+werden vom Fluss getrennt. Drei Brücken, eine Felsschlucht und das Stadttor sind die
+einzigen Übergänge; dort entstehen die Kämpfe. 17 Gebäude stehen in der Altstadt, fünf
+davon sind betretbar (Dach weg, Regale als Deckung, Beute im Innenraum).
+
+Der Seed steuert Bewuchs, Bodentöne und Streugut, nicht das Layout. Die Tageszeit
+(Tag / Abend / Nacht) legt einen Farbschleier über die Szene.
+
 ## Steuerung
 
 | Aktion | Spieler 1 | Spieler 2 |
@@ -49,9 +60,9 @@ src/
   game/              game, camera, waveManager, score
   entities/          player, zombie, bullet, pickup, crate
   systems/           combat, movement, pathfinding, powerups, particles
-  world/             mapGenerator, biomes, tiles, collision
-  render/            renderer, hud, minimap, sprites
-  config/            weapons, enemies, waves, controls, balance
+  world/             mapGenerator, terrain, tiles, collision
+  render/            renderer, worldArt, hud, minimap, sprites
+  config/            weapons, enemies, waves, controls, balance, skins
   ui/                menu, pause, gameOver
 ```
 
@@ -67,8 +78,10 @@ einmal definiert.
 - Geschosse als Strahlenabfrage über die pro Tick zurückgelegte Strecke.
 - Wegfindung über Distanzfelder (BFS), alle 0,25 s neu berechnet — je ein Feld pro
   Spieler und Durchlässigkeit (Kriecher überwinden niedrige Hindernisse).
-- Gelände wird in 640-px-Kacheln vorgerendert und nur bei zerstörten Hindernissen neu gebacken.
-- Karten sind seedbasiert und reproduzierbar (Mulberry32, kein `Math.random()`).
+- Der Boden wird einmalig in 800-px-Kachelblöcke vorgerendert; Gebäude und Streuobjekte
+  liegen als vorgezeichnete Sprites darüber und verschwinden mit ihrer Kachel.
+- Kartenlayout, Gebäude und Engstellen sind handgesetzt; Bewuchs, Bodentöne und Streugut
+  sind seedbasiert und reproduzierbar (Mulberry32, kein `Math.random()`).
 
 ### Entwicklungshilfe
 
@@ -76,7 +89,7 @@ Im Entwicklungsmodus liegt die App unter `window.__zk`. Damit lässt sich das Sp
 deterministisch durchsimulieren, ohne auf `requestAnimationFrame` zu warten:
 
 ```js
-__zk.debugStart(12345, 'stadt');
+__zk.debugStart({ seed: 12345, timeOfDay: 'Tag', skins: [0, 3] });
 __zk.debugAdvance(60);        // 60 Sekunden Simulation
 __zk.debugRender();
 __zk.debugGame.wave.wave;

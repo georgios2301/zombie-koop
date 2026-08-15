@@ -11,7 +11,6 @@ import { Renderer } from './render/renderer.ts';
 import { GameOverScreen } from './ui/gameOver.ts';
 import { MenuScreen, type StartOptions } from './ui/menu.ts';
 import { PauseScreen } from './ui/pause.ts';
-import type { BiomeId } from './world/biomes.ts';
 
 type AppState = 'menue' | 'spiel' | 'pause' | 'ende';
 
@@ -76,7 +75,7 @@ class App {
     audio.unlock();
     this.lastOptions = options;
     // Frische Instanz: kein Zustand aus dem alten Match bleibt übrig.
-    const game = new Game(options.seed, options.biome, this.bindings);
+    const game = new Game(options, this.bindings);
     this.game = game;
     this.renderer.resize();
     game.camera.resize(this.renderer.cssWidth, this.renderer.cssHeight);
@@ -118,7 +117,7 @@ class App {
       score: game.score.total,
       wave: game.wave.wave,
       seed: game.seed,
-      biome: game.biome,
+      timeOfDay: game.timeOfDay,
     });
     const screen = new GameOverScreen(game, isNew, {
       onRestart: () => {
@@ -154,8 +153,8 @@ class App {
 
   // --- Nur für automatisierte Prüfungen (Entwicklungsmodus) --------------
 
-  debugStart(seed: number, biome: BiomeId): void {
-    this.startGame({ seed, biome });
+  debugStart(options: StartOptions): void {
+    this.startGame(options);
   }
 
   debugAdvance(seconds: number): void {

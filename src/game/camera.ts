@@ -1,12 +1,12 @@
 import {
-  CAMERA_LERP, MAP_SIZE, ZOOM_DIST_MAX, ZOOM_DIST_MIN, ZOOM_MAX, ZOOM_MIN,
+  CAMERA_LERP, MAP_HEIGHT, MAP_WIDTH, ZOOM_DIST_MAX, ZOOM_DIST_MIN, ZOOM_MAX, ZOOM_MIN,
 } from '../config/balance.ts';
 import type { Player } from '../entities/player.ts';
 
 /** Gemeinsame Kamera für beide Spieler — kein Splitscreen. */
 export class Camera {
-  x = MAP_SIZE / 2;
-  y = MAP_SIZE / 2;
+  x = MAP_WIDTH / 2;
+  y = MAP_HEIGHT / 2;
   zoom = ZOOM_MAX;
   viewWidth = 0;
   viewHeight = 0;
@@ -62,10 +62,10 @@ export class Camera {
   private clampToMap(): void {
     const halfW = this.viewWidth / 2;
     const halfH = this.viewHeight / 2;
-    if (this.viewWidth >= MAP_SIZE) this.x = MAP_SIZE / 2;
-    else this.x = Math.min(MAP_SIZE - halfW, Math.max(halfW, this.x));
-    if (this.viewHeight >= MAP_SIZE) this.y = MAP_SIZE / 2;
-    else this.y = Math.min(MAP_SIZE - halfH, Math.max(halfH, this.y));
+    if (this.viewWidth >= MAP_WIDTH) this.x = MAP_WIDTH / 2;
+    else this.x = Math.min(MAP_WIDTH - halfW, Math.max(halfW, this.x));
+    if (this.viewHeight >= MAP_HEIGHT) this.y = MAP_HEIGHT / 2;
+    else this.y = Math.min(MAP_HEIGHT - halfH, Math.max(halfH, this.y));
   }
 
   get left(): number {

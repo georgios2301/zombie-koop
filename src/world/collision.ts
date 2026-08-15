@@ -1,7 +1,7 @@
-import { MAP_TILES, TILE_SIZE } from '../config/balance.ts';
+import { MAP_COLS, MAP_ROWS, TILE_SIZE } from '../config/balance.ts';
 import type { GameMap } from './mapGenerator.ts';
 import {
-  T_BORDER, T_GROUND_B, TILE_HP, isBlocking, isDestructible, isLow, isSolid,
+  T_BORDER, TILE_HP, isBlocking, isDestructible, isLow, isSolid,
 } from './tiles.ts';
 
 const EPS = 0.001;
@@ -9,13 +9,13 @@ const EPS = 0.001;
 export function tileIndexAt(x: number, y: number): number {
   const tx = Math.floor(x / TILE_SIZE);
   const ty = Math.floor(y / TILE_SIZE);
-  if (tx < 0 || ty < 0 || tx >= MAP_TILES || ty >= MAP_TILES) return -1;
-  return ty * MAP_TILES + tx;
+  if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return -1;
+  return ty * MAP_COLS + tx;
 }
 
 export function tileAt(map: GameMap, tx: number, ty: number): number {
-  if (tx < 0 || ty < 0 || tx >= MAP_TILES || ty >= MAP_TILES) return T_BORDER;
-  return map.tiles[ty * MAP_TILES + tx];
+  if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return T_BORDER;
+  return map.tiles[ty * MAP_COLS + tx];
 }
 
 /** passLow = Kriecher: niedrige Hindernisse behindern ihn nicht. */
@@ -162,24 +162,37 @@ export interface TileDamageSink {
   onTileDestroyed(tx: number, ty: number): void;
 }
 
-/** Gibt true zurück, wenn die Kachel dadurch zerstört wurde. */
+/**
+ * Gibt true zurück, wenn das Hindernis dadurch zerstört wurde. Zweikachlige
+ * Hindernisse (Autos, Container) teilen sich die HP der Hauptkachel und fallen
+ * gemeinsam.
+ */
 export function damageTile(
   map: GameMap, tx: number, ty: number, amount: number, sink: TileDamageSink | null,
 ): boolean {
-  if (tx < 0 || ty < 0 || tx >= MAP_TILES || ty >= MAP_TILES) return false;
-  const index = ty * MAP_TILES + tx;
-  const tile = map.tiles[index];
-  if (!isDestructible(tile)) return false;
-  const left = map.hp[index] - amount;
+  if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return false;
+  const hit = ty * MAP_COLS + tx;
+  if (!isDestructible(map.tiles[hit])) return false;
+  const owner = map.primary[hit] >= 0 ? map.primary[hit] : hit;
+  const left = map.hp[owner] - amount;
   if (left > 0) {
-    map.hp[index] = left;
+    map.hp[owner] = left;
     return false;
   }
-  map.tiles[index] = T_GROUND_B;
-  map.hp[index] = 0;
-  map.region[index] = 1;
-  if (sink) sink.onTileDestroyed(tx, ty);
+  clearObstacle(map, owner, sink);
+  const second = map.partner[owner];
+  if (second >= 0) clearObstacle(map, second, sink);
   return true;
+}
+
+function clearObstacle(map: GameMap, index: number, sink: TileDamageSink | null): void {
+  map.tiles[index] = map.ground[index];
+  map.hp[index] = 0;
+  map.primary[index] = -1;
+  map.partner[index] = -1;
+  if (isBlocking(map.tiles[index])) return;
+  map.region[index] = 1;
+  if (sink) sink.onTileDestroyed(index % MAP_COLS, (index / MAP_COLS) | 0);
 }
 
 export function isLowTileAt(map: GameMap, tx: number, ty: number): boolean {
@@ -187,6 +200,6 @@ export function isLowTileAt(map: GameMap, tx: number, ty: number): boolean {
 }
 
 export function restoreTileHp(map: GameMap, tx: number, ty: number): void {
-  const index = ty * MAP_TILES + tx;
+  const index = ty * MAP_COLS + tx;
   map.hp[index] = TILE_HP[map.tiles[index]];
 }

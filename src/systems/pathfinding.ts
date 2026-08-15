@@ -1,8 +1,8 @@
-import { MAP_TILES, TILE_SIZE } from '../config/balance.ts';
+import { MAP_COLS, MAP_ROWS, TILE_SIZE } from '../config/balance.ts';
 import type { GameMap } from '../world/mapGenerator.ts';
 import { tileBlocks } from '../world/collision.ts';
 
-const SIZE = MAP_TILES * MAP_TILES;
+const SIZE = MAP_COLS * MAP_ROWS;
 
 /**
  * Distanzfeld per BFS vom Ziel aus. Die Richtung wird beim Abfragen aus den
@@ -24,12 +24,12 @@ export class FlowField {
     const ty = Math.floor(targetY / TILE_SIZE);
     this.dist.fill(-1);
     this.valid = false;
-    if (tx < 0 || ty < 0 || tx >= MAP_TILES || ty >= MAP_TILES) return;
+    if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return;
     if (tileBlocks(map, tx, ty, this.passLow)) return;
 
     const queue = this.queue;
     const dist = this.dist;
-    const start = ty * MAP_TILES + tx;
+    const start = ty * MAP_COLS + tx;
     let head = 0;
     let tail = 0;
     queue[tail++] = start;
@@ -37,20 +37,20 @@ export class FlowField {
 
     while (head < tail) {
       const cur = queue[head++];
-      const cx = cur % MAP_TILES;
-      const cy = (cur / MAP_TILES) | 0;
+      const cx = cur % MAP_COLS;
+      const cy = (cur / MAP_COLS) | 0;
       const next = dist[cur] + 1;
       if (cx > 0 && dist[cur - 1] === -1 && !tileBlocks(map, cx - 1, cy, this.passLow)) {
         dist[cur - 1] = next; queue[tail++] = cur - 1;
       }
-      if (cx < MAP_TILES - 1 && dist[cur + 1] === -1 && !tileBlocks(map, cx + 1, cy, this.passLow)) {
+      if (cx < MAP_COLS - 1 && dist[cur + 1] === -1 && !tileBlocks(map, cx + 1, cy, this.passLow)) {
         dist[cur + 1] = next; queue[tail++] = cur + 1;
       }
-      if (cy > 0 && dist[cur - MAP_TILES] === -1 && !tileBlocks(map, cx, cy - 1, this.passLow)) {
-        dist[cur - MAP_TILES] = next; queue[tail++] = cur - MAP_TILES;
+      if (cy > 0 && dist[cur - MAP_COLS] === -1 && !tileBlocks(map, cx, cy - 1, this.passLow)) {
+        dist[cur - MAP_COLS] = next; queue[tail++] = cur - MAP_COLS;
       }
-      if (cy < MAP_TILES - 1 && dist[cur + MAP_TILES] === -1 && !tileBlocks(map, cx, cy + 1, this.passLow)) {
-        dist[cur + MAP_TILES] = next; queue[tail++] = cur + MAP_TILES;
+      if (cy < MAP_ROWS - 1 && dist[cur + MAP_COLS] === -1 && !tileBlocks(map, cx, cy + 1, this.passLow)) {
+        dist[cur + MAP_COLS] = next; queue[tail++] = cur + MAP_COLS;
       }
     }
     this.valid = true;
@@ -59,8 +59,8 @@ export class FlowField {
   distanceAt(x: number, y: number): number {
     const tx = Math.floor(x / TILE_SIZE);
     const ty = Math.floor(y / TILE_SIZE);
-    if (tx < 0 || ty < 0 || tx >= MAP_TILES || ty >= MAP_TILES) return -1;
-    return this.dist[ty * MAP_TILES + tx];
+    if (tx < 0 || ty < 0 || tx >= MAP_COLS || ty >= MAP_ROWS) return -1;
+    return this.dist[ty * MAP_COLS + tx];
   }
 
   reachable(x: number, y: number): boolean {
@@ -82,9 +82,9 @@ export function sampleFlow(field: FlowField, map: GameMap, x: number, y: number,
   flowDir.y = 0;
   const tx = Math.floor(x / TILE_SIZE);
   const ty = Math.floor(y / TILE_SIZE);
-  if (tx < 1 || ty < 1 || tx >= MAP_TILES - 1 || ty >= MAP_TILES - 1) return;
+  if (tx < 1 || ty < 1 || tx >= MAP_COLS - 1 || ty >= MAP_ROWS - 1) return;
 
-  const here = field.dist[ty * MAP_TILES + tx];
+  const here = field.dist[ty * MAP_COLS + tx];
   let best = here >= 0 ? here : Infinity;
   let bestX = 0;
   let bestY = 0;
@@ -92,7 +92,7 @@ export function sampleFlow(field: FlowField, map: GameMap, x: number, y: number,
   for (let i = 0; i < 8; i++) {
     const nx = tx + NEIGHBOR_X[i];
     const ny = ty + NEIGHBOR_Y[i];
-    const d = field.dist[ny * MAP_TILES + nx];
+    const d = field.dist[ny * MAP_COLS + nx];
     if (d < 0) continue;
     // Diagonalen nur, wenn beide angrenzenden Kacheln frei sind
     if (NEIGHBOR_X[i] !== 0 && NEIGHBOR_Y[i] !== 0) {

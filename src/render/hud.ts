@@ -4,7 +4,7 @@ import type { Player } from '../entities/player.ts';
 import type { Game } from '../game/game.ts';
 import { POWERUPS } from '../systems/powerups.ts';
 import { seedToText } from '../core/rng.ts';
-import { BIOMES } from '../world/biomes.ts';
+import { MAP_NAME } from '../world/terrain.ts';
 import { Minimap } from './minimap.ts';
 
 const PANEL_WIDTH = 268;
@@ -27,8 +27,8 @@ export class Hud {
     this.drawTopBar(ctx, game, width);
     this.drawBossBar(ctx, game, width);
 
-    const mapSize = Math.min(180, Math.max(120, Math.round(height * 0.2)));
-    this.minimap.draw(ctx, game, width - mapSize - MARGIN - 4, MARGIN + 68, mapSize);
+    const mapWidth = Math.min(220, Math.max(150, Math.round(height * 0.24)));
+    this.minimap.draw(ctx, game, width - mapWidth - MARGIN - 4, MARGIN + 68, mapWidth);
 
     this.drawSummary(ctx, game, width, height);
     this.drawFooter(ctx, game, width, height, fps);
@@ -212,7 +212,7 @@ export class Hud {
     ctx.font = '11px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(141,154,168,0.75)';
     ctx.fillText(
-      `Seed ${seedToText(game.seed)} · ${BIOMES[game.biome].name} · ${fps} fps · P = Pause · M = Ton`,
+      `${MAP_NAME} · Seed ${seedToText(game.seed)} · ${game.timeOfDay} · ${fps} fps · P = Pause · M = Ton`,
       width / 2, height - 18,
     );
   }
